@@ -10,7 +10,7 @@ public:
     int getSensorTemp();
 private:
     void ledStatusChange();
-    constexpr static char* LED_DIR = "/sys/class/leds/am62-sk:green:heartbeat/";
+    static constexpr const char* LED_DIR = "/sys/class/leds/am62-sk:green:heartbeat/";
     bool writeFile(const std::string& path, const std::string& value);
     bool writeInt(const std::string& path, int v);
     void setOff();
