@@ -62,6 +62,6 @@ void Sensoralarm::ledStatusChange() {
         blinkFast();
     } else {
         ledStatus = 3;
-        blinkFast();
+        setOn();
     }
 }
