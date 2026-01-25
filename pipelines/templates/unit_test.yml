@@ -1,0 +1,66 @@
+parameters:
+  vmImage: 'ubuntu-22.04'
+  buildDir: 'build'
+  buildType: 'Debug'
+  sdkRoot: ''
+  coverageDir: 'coverage'
+
+jobs:
+- job: unit_test
+  displayName: Unit Test Job
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+  - checkout: self
+    clean: true
+
+  - bash: |
+      set -euxo pipefail
+      ./pipelines/scripts/ci_setup_deps.sh
+    displayName: Setup dependencies
+
+  - bash: |
+      set -euxo pipefail
+      # SDKを使う場合はここで環境を読み込む（SDKの構成に合わせて調整）
+      # 例: source $SDKROOT/linux-devkit/environment-setup*
+      export SDKROOT='${{ parameters.sdkRoot }}'
+      ./pipelines/scripts/ci_build.sh '${{ parameters.buildDir }}' '${{ parameters.buildType }}'
+    displayName: Build (with coverage flags)
+
+  - bash: |
+      set -euxo pipefail
+      ./pipelines/scripts/ci_test.sh '${{ parameters.buildDir }}'
+    displayName: Run gtest (and generate JUnit XML)
+
+  - task: PublishTestResults@2
+    displayName: Publish test results (JUnit)
+    condition: succeededOrFailed()
+    inputs:
+      testResultsFormat: 'JUnit'
+      testResultsFiles: '**/test-results*.xml'
+      searchFolder: '$(System.DefaultWorkingDirectory)'
+      failTaskOnFailedTests: true
+
+  - bash: |
+      set -euxo pipefail
+      ./pipelines/scripts/ci_coverage.sh '${{ parameters.buildDir }}' '${{ parameters.coverageDir }}'
+    displayName: Generate coverage (gcovr)
+
+  - task: PublishCodeCoverageResults@2
+    displayName: Publish coverage
+    condition: succeededOrFailed()
+    inputs:
+      # ※ ここは gcovr の出力形式に合わせる（下の script 側で Cobertura を出す）
+      codeCoverageTool: 'Cobertura'
+      summaryFileLocation: '${{ parameters.coverageDir }}/coverage.xml'
+      reportDirectory: '${{ parameters.coverageDir }}/html'
+      failIfCoverageEmpty: false
+
+  - task: PublishPipelineArtifact@1
+    displayName: Upload coverage artifacts
+    condition: succeededOrFailed()
+    inputs:
+      targetPath: '${{ parameters.coverageDir }}'
+      artifact: 'coverage'
+      publishLocation: 'pipeline'
