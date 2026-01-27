@@ -1,0 +1,65 @@
+trigger:
+- main
+
+stages:
+# -----------------------
+# Stage 1: Build + Unit Test (クラウドVM / Hosted)
+# -----------------------
+- stage: CI
+  displayName: Build & Unit Test
+  jobs:
+  - job: unit
+    pool:
+      vmImage: 'ubuntu-22.04'
+    steps:
+    - checkout: self
+    - script: |
+        set -eux
+        # 例：ビルド & 単体テスト（ここはあなたの実プロジェクトに合わせて）
+        # make test / ctest / python -m unittest など
+        echo "unit test passed"
+      displayName: Build & Unit Test
+
+# -----------------------
+# Stage 2: System Test (EVM接続PC / Self-hosted)
+# -----------------------
+- stage: SystemTest
+  displayName: System Test on EVM-connected PC
+  dependsOn: CI
+  condition: succeeded('CI')
+  jobs:
+  - job: systest
+    displayName: Run system_test.py
+    pool:
+      name: 'EVM-Connected-Pool'    # ←作ったAgent Pool名
+      demands:
+      - EVM -equals am62x           # ←任意：capabilityで縛る（推奨）
+    steps:
+    - checkout: self
+
+    - script: |
+        set -eux
+        python3 --version
+        # 依存ゼロ（標準ライブラリのみ）ならpip不要
+        # 実行
+        python3 system_test/system_test.py
+      displayName: Run system tests
+
+    # 1) テスト結果をAzure DevOpsに載せる（XML）
+    - task: PublishTestResults@2
+      displayName: Publish test results (JUnit)
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: 'system_test-results/**/*.xml'
+        mergeTestResults: true
+        testRunTitle: 'AM62x System Test'
+        failTaskOnFailedTests: true
+
+    # 2) JSON/LOG含めて成果物として保存（後からDL可能）
+    - task: PublishPipelineArtifact@1
+      displayName: Publish system test artifacts
+      condition: succeededOrFailed()
+      inputs:
+        targetPath: 'system_test-results'
+        artifact: 'system_test-results'
